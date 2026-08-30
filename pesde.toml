@@ -3,10 +3,12 @@ version = "0.1.0"
 description = "Identity-preserving runtime guards for Roblox."
 license = "MIT"
 authors = ["Edward"]
+private = true
 
 includes = [
 	"pesde.toml",
 	"LICENSE",
+	"README.md",
 	"src/**/*.luau",
 ]
 

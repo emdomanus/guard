@@ -70,6 +70,35 @@ test("primitive, literal, and enum guards return their input", function()
 	assertSame(Guard.enumInSet({ [token] = true })(token), token)
 end)
 
+test("enum snapshots its construction values", function()
+	local values = { "alpha" }
+	local guard = Guard.enum(values)
+
+	values[1] = "beta"
+	table.insert(values, "gamma")
+
+	assertEqual(guard("alpha"), "alpha")
+	expectErrorContains(function()
+		guard("beta")
+	end, "Guard.enum rejected beta")
+	expectErrorContains(function()
+		guard("gamma")
+	end, "Guard.enum rejected gamma")
+end)
+
+test("enumInSet snapshots its construction set", function()
+	local set: { [string]: unknown } = { alpha = true }
+	local guard = Guard.enumInSet(set)
+
+	set.alpha = nil
+	set.beta = true
+
+	assertEqual(guard("alpha"), "alpha")
+	expectErrorContains(function()
+		guard("beta")
+	end, "Guard.enumInSet rejected beta")
+end)
+
 test("property validates frozen input without assigning", function()
 	local nested = table.freeze({ name = "Ada" })
 	local input = table.freeze({ profile = nested })
@@ -103,6 +132,20 @@ test("map and mapExcluding validate original entries and preserve identity", fun
 	assertSame(Guard.mapExcluding(Guard.string, Guard.string, { primary = true })(input), input)
 end)
 
+test("mapExcluding snapshots its excluded keys", function()
+	local excludedKeys: { [unknown]: true } = { ignored = true }
+	local guard = Guard.mapExcluding(Guard.string, Guard.string, excludedKeys)
+
+	excludedKeys.ignored = nil
+	excludedKeys.added = true
+
+	local input = table.freeze({ ignored = 42, kept = "valid" })
+	assertSame(guard(input), input)
+	expectErrorContains(function()
+		guard({ ignored = 42, added = 42 })
+	end, "Guard.mapExcluding value [added]")
+end)
+
 test("map rejects key and value replacement without cloning", function()
 	local input = { score = 4 }
 	local function replaceKey(_value: unknown): string
@@ -132,7 +175,7 @@ test("array preserves table and element identity", function()
 	assertSame(input[2], second)
 end)
 
-test("array retains established sparse numeric-map acceptance", function()
+test("array retains sparse numeric-map acceptance", function()
 	local sparse = table.freeze({ [1] = "first", [3] = "third" })
 	assertSame(Guard.array(Guard.string)(sparse), sparse)
 end)
@@ -150,6 +193,23 @@ test("exactRecord accepts required and optional fields and rejects exact-key vio
 	expectErrorContains(function()
 		guard({ nickname = "A" })
 	end, 'Guard.exactRecord field "name"')
+	expectErrorContains(function()
+		guard({ name = "Ada", extra = true })
+	end, 'Guard.exactRecord unexpected field "extra"')
+end)
+
+test("exactRecord snapshots its construction schema", function()
+	local schema: { [string]: GuardFn<unknown> } = { name = Guard.string }
+	local guard: GuardFn<UnknownTable> = Guard.exactRecord(schema)
+
+	schema.name = Guard.number
+	schema.extra = Guard.boolean
+
+	local input = table.freeze({ name = "Ada" })
+	assertSame(guard(input), input)
+	expectErrorContains(function()
+		guard({ name = 42 })
+	end, "Guard.string expected string")
 	expectErrorContains(function()
 		guard({ name = "Ada", extra = true })
 	end, 'Guard.exactRecord unexpected field "extra"')
@@ -215,6 +275,27 @@ test("byTag preserves identity and rejects replacement arms", function()
 	expectErrorContains(function()
 		Guard.byTag("kind", { ready = readyGuard })({ kind = "unknown", value = 1 })
 	end, 'Guard.byTag unknown kind "unknown"')
+end)
+
+test("byTag snapshots its construction arms", function()
+	local readyGuard: GuardFn<UnknownTable> = Guard.exactRecord({
+		kind = Guard.literal("ready"),
+		value = Guard.number,
+	})
+	local arms: { [string]: GuardFn<UnknownTable> } = { ready = readyGuard }
+	local tagged = Guard.byTag("kind", arms)
+
+	local function mutatedArm(_value: unknown): UnknownTable
+		error("mutated arm should not run")
+	end
+	arms.ready = mutatedArm
+	arms.other = Guard.table
+
+	local input = table.freeze({ kind = "ready", value = 1 })
+	assertSame(tagged(input), input)
+	expectErrorContains(function()
+		tagged({ kind = "other" })
+	end, 'Guard.byTag unknown kind "other"')
 end)
 
 test("all runs every child against the original value and rejects replacement", function()

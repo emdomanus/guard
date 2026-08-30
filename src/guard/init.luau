@@ -2,7 +2,8 @@
 --!optimize 2
 --!native
 
--- Guards are synchronous validators. Every successful path returns the exact input value.
+-- Guards preserve identity. Child guards are contractually non-yielding, but Luau's yieldable
+-- pcall can propagate a violating child's yield rather than enforce that contract.
 
 export type GuardFn<T> = (value: unknown) -> T
 export type UnknownTable = { [unknown]: unknown }
@@ -97,13 +98,14 @@ local function literal<T>(expected: T): GuardFn<T>
 end
 
 local function enumGuard<E>(values: { E }): GuardFn<E>
+	local valueSnapshot = table.freeze(table.clone(values))
 	local labels = {} :: { string }
-	for _, candidate in values do
+	for _, candidate in valueSnapshot do
 		table.insert(labels, tostring(candidate))
 	end
 
 	return function(value: unknown): E
-		for _, candidate in values do
+		for _, candidate in valueSnapshot do
 			if isIdentical(value, candidate) then
 				return value :: E
 			end
@@ -180,15 +182,17 @@ local function oneOfImplementation(...: GuardFn<unknown>): GuardFn<unknown>
 end
 
 local function byTag<T>(tagKey: string, arms: { [string]: GuardFn<T> }): GuardFn<T>
+	local armSnapshot = table.freeze(table.clone(arms))
+
 	return function(value: unknown): T
 		assert(type(value) == "table", `Guard.byTag expected table, got {kindOf(value)}`)
 
 		local record = value :: UnknownTable
 		local tag = record[tagKey]
-		local arm = if type(tag) == "string" then arms[tag] else nil
+		local arm = if type(tag) == "string" then armSnapshot[tag] else nil
 		if arm == nil then
 			local validTags = {} :: { string }
-			for validTag in arms do
+			for validTag in armSnapshot do
 				table.insert(validTags, validTag)
 			end
 			table.sort(validTags)
@@ -234,8 +238,7 @@ local function map<K, V>(keyGuard: GuardFn<K>, valueGuard: GuardFn<V>): GuardFn<
 end
 
 local function array<V>(valueGuard: GuardFn<V>): GuardFn<{ V }>
-	-- Preserve AdvancedUtils' established structural behavior: array is a numeric-keyed map,
-	-- so sparse, fractional, zero, and negative numeric keys remain accepted.
+	-- Array retains numeric-map semantics, including sparse numeric keys.
 	return map(numberGuard, valueGuard) :: GuardFn<{ V }>
 end
 
@@ -244,12 +247,14 @@ local function mapExcluding<K, V>(
 	valueGuard: GuardFn<V>,
 	excludeKeys: { [unknown]: true }
 ): GuardFn<{ [K]: V }>
+	local excludedKeySnapshot = table.freeze(table.clone(excludeKeys))
+
 	return function(value: unknown): { [K]: V }
 		assert(type(value) == "table", `Guard.mapExcluding expected table, got {kindOf(value)}`)
 
 		local record = value :: UnknownTable
 		for rawKey, rawValue in record do
-			if excludeKeys[rawKey] then
+			if excludedKeySnapshot[rawKey] then
 				continue
 			end
 
@@ -274,12 +279,14 @@ local function property<T, P>(key: P, valueGuard: GuardFn<T>): GuardFn<{ [P]: T 
 end
 
 local function exactRecord<T>(schema: ExactRecordSchema): GuardFn<T>
+	local schemaSnapshot = table.freeze(table.clone(schema))
+
 	return function(value: unknown): T
 		assert(type(value) == "table", `Guard.exactRecord expected table, got {kindOf(value)}`)
 
 		local record = value :: UnknownTable
 		for rawKey in record do
-			if type(rawKey) ~= "string" or schema[rawKey] == nil then
+			if type(rawKey) ~= "string" or schemaSnapshot[rawKey] == nil then
 				error(
 					`Guard.exactRecord unexpected field {string.format("%q", tostring(rawKey))}`,
 					2
@@ -287,7 +294,7 @@ local function exactRecord<T>(schema: ExactRecordSchema): GuardFn<T>
 			end
 		end
 
-		for fieldName, fieldGuard in schema do
+		for fieldName, fieldGuard in schemaSnapshot do
 			local rawValue: unknown = rawget(record, fieldName)
 			runChild(
 				`Guard.exactRecord field {string.format("%q", fieldName)}`,
@@ -316,9 +323,11 @@ local function forbid(...: string): GuardFn<UnknownTable>
 end
 
 local function enumInSet<E>(set: { [E]: unknown }): GuardFn<E>
+	local setSnapshot = table.freeze(table.clone(set))
+
 	return function(value: unknown): E
 		assert(value ~= nil, "Guard.enumInSet expected a non-nil value")
-		assert(set[value :: E] ~= nil, `Guard.enumInSet rejected {tostring(value)}`)
+		assert(setSnapshot[value :: E] ~= nil, `Guard.enumInSet rejected {tostring(value)}`)
 		return value :: E
 	end
 end
