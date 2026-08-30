@@ -1,0 +1,21 @@
+{
+  "name": "guard-dev",
+  "tree": {
+    "$className": "DataModel",
+    "ReplicatedStorage": {
+      "$className": "ReplicatedStorage",
+      "packages": {
+        "$className": "Folder",
+        "guard": {
+          "$path": "src"
+        }
+      }
+    },
+    "ServerScriptService": {
+      "$className": "ServerScriptService",
+      "guardTypeContracts": {
+        "$path": "tests/type-contracts"
+      }
+    }
+  }
+}

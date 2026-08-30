@@ -1,0 +1,12 @@
+*.rbxm
+*.rbxmx
+*.rbxlx
+*.tar.gz
+sourcemap.json
+dev-sourcemap.json
+.pesde/
+roblox_packages/
+luau_packages/
+lune_packages/
+scripts/luau-lsp/globalTypes.d.luau
+.guard-lune-runtime/
