@@ -1,6 +1,18 @@
 # Type-function globals absent from Selene 0.31's Roblox standard library.
 # https://luau.org/types-library/
 globals:
+  types.unknown:
+    property: read-only
+  types.string:
+    property: read-only
+  types.newfunction:
+    args:
+      - type: table
+      - type: table
+        required: false
+      - type: table
+        required: false
+    must_use: true
   types.newtable:
     args:
       - type: table

@@ -52,6 +52,12 @@ fields from the schema's guard results; `byTag` derives the union of its arm res
 literals precise, for example `Guard.literal("profile" :: "profile")`. A mismatched claimed record
 shape is rejected instead of being inferred from a return-only generic.
 
+`byTag` preserves the supplied arms' type without intersecting it with an unknown-valued map.
+Its type function validates string arm keys and guard functions callable with `unknown`, then
+combines their result types. Named arms, string-indexed maps, and intersections of those table
+shapes are supported. Invalid arm declarations produce type errors; runtime validation and
+identity preservation are unchanged.
+
 `mapExcluding` preserves and skips excluded entries, including their keys and values. Its return
 type is now `GuardFn<UnknownTable>`: an excluded value may not satisfy the value guard, and an excluded
 key may not satisfy the key guard. Previously the signature incorrectly claimed that every entry
@@ -74,11 +80,18 @@ alongside complete output under `.verification/`; it never replaces Rokit's cach
 
 Run `scripts/verify/tests.ps1`, `scripts/verify/stylua.ps1`, `scripts/verify/selene.ps1`, and
 `scripts/verify/analyze.ps1` through PowerShell 7. Accepted contracts must have zero diagnostics.
-The draft rejected examples in `tests/type-errors/` still need an expectation-checking runner.
-`scripts/verify/tooling-tests.ps1` exercises process capture and invalid override rejection.
+Run `scripts/verify/type-errors.ps1 -Definitions <fixed-definitions-file> -OutDir <fresh-directory>`
+to verify the rejected examples in `tests/type-errors/`. Every `EXPECT_ERROR` marker must have a
+type diagnostic on that expression's line, and every diagnostic must belong to a marked expression.
+The runner rejects unexpected dependency/syntax diagnostics, missing rejections, infrastructure
+failures and complexity failures. It saves complete analyzer output, identity metadata and a passing
+expectation report. Use a fresh output directory for each run to prevent stale evidence reuse.
+`scripts/verify/tooling-tests.ps1` exercises process capture, invalid override rejection, diagnostic
+path normalization and ten failure cases that must not be mistaken for successful negative tests.
 
-The last recorded analyzer capture predates removal of the broad indexer intersection from
-`byTag`'s `arms` parameter. This checkpoint preserves that inference fix; a fresh accepted-contract
-capture and rejected-input coverage are still pending. VoxelMMO's
-`docs/todo/overnightPackageMigration.md` records the earlier verification evidence. Further migration
-work now follows the repository owner's individual instructions rather than that staged plan.
+The September 28 follow-up passes source/accepted-contract analysis with zero diagnostics and rejects
+all eight marked invalid expressions. It retains the broad-intersection removal and closes the
+numeric-key and narrow-function-input gaps exposed by the new tests. Local evidence is in
+`.verification/contract-verification/accepted-final/` and `rejected-final/`. VoxelMMO's
+`docs/todo/overnightPackageMigration.md` is the earlier handoff, not the current package verification
+status. Further migration work follows the repository owner's individual instructions.

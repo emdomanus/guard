@@ -22,7 +22,7 @@ if ($generated.ExitCode -ne 0) { exit $generated.ExitCode }
 $arguments = @('analyze', '--flag:LuauSolverV2=true', "--sourcemap=$Sourcemap", "--definitions:@roblox=$definitionsPath") + $Paths
 Write-Output "Analyzer: $($analyzer.Path); version=$($analyzer.Version); source=$($analyzer.Source); sha256=$($analyzer.Sha256); solver=V2"
 $result = Invoke-PackageTool $analyzer.Path $arguments
-$evidence = [IO.Path]::GetFullPath((Join-Path $repoRoot $OutDir))
+$evidence = [IO.Path]::GetFullPath($OutDir, $repoRoot)
 New-Item -ItemType Directory -Force $evidence | Out-Null
 [IO.File]::WriteAllText((Join-Path $evidence 'raw.txt'), $result.Output)
 $summary = [ordered]@{

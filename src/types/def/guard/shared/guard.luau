@@ -57,23 +57,44 @@ export type function RecordOf(schema)
 end
 
 export type function TaggedOf(arms)
-	assert(arms:is("table"), "Guard.byTag requires an arms table")
+	local guardType = types.newfunction({ head = { types.unknown } }, { head = { types.unknown } })
 	local result = types.never
-	for _, field in arms:properties() do
-		local guard = field.read
-		assert(guard and guard:is("function"), "Guard.byTag arms must be guards")
-		local returns = guard:returns()
-		assert(returns.head and returns.head[1], "Guard.byTag arms must return a value")
-		result = types.unionof(result, returns.head[1])
+	local function collect(shape)
+		-- Explicit intersections can express a named arm plus a dynamic arm map.
+		-- Include every constituent's possible result, without inventing an indexer.
+		if shape:is("intersection") then
+			for _, component in shape:components() do
+				collect(component)
+			end
+			return
+		end
+		assert(shape:is("table"), "Guard.byTag requires an arms table")
+		for _, field in shape:properties() do
+			local guard = field.read
+			assert(guard and guard:is("function"), "Guard.byTag arms must be guards")
+			assert(
+				guard:issubtypeof(guardType),
+				"Guard.byTag arms must accept unknown and return a value"
+			)
+			local returns = guard:returns()
+			assert(returns.head and returns.head[1], "Guard.byTag arms must return a value")
+			result = types.unionof(result, returns.head[1])
+		end
+		local indexer = shape:indexer()
+		if indexer then
+			assert(indexer.index:issubtypeof(types.string), "Guard.byTag arm keys must be strings")
+			local guard = indexer.readresult
+			assert(guard:is("function"), "Guard.byTag indexed arms must be guards")
+			assert(
+				guard:issubtypeof(guardType),
+				"Guard.byTag indexed arms must accept unknown and return a value"
+			)
+			local returns = guard:returns()
+			assert(returns.head and returns.head[1], "Guard.byTag arms must return a value")
+			result = types.unionof(result, returns.head[1])
+		end
 	end
-	local indexer = arms:indexer()
-	if indexer then
-		local guard = indexer.readresult
-		assert(guard:is("function"), "Guard.byTag indexed arms must be guards")
-		local returns = guard:returns()
-		assert(returns.head and returns.head[1], "Guard.byTag arms must return a value")
-		result = types.unionof(result, returns.head[1])
-	end
+	collect(arms)
 	return result
 end
 
