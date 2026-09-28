@@ -323,7 +323,7 @@ local function forbid(...: string): GuardFn<UnknownTable>
 	end
 end
 
-local function enumInSet<E>(set: { [E]: unknown }): GuardFn<E>
+local function enumInSet<E, V>(set: { [E]: V }): GuardFn<E>
 	local setSnapshot = table.freeze(table.clone(set))
 
 	return function(value: unknown): E

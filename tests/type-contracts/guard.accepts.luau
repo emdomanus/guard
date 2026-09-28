@@ -68,6 +68,12 @@ local propertyGuard: Guard.GuardFn<{ name: string } & Guard.UnknownTable> =
 	Guard.property("name", Guard.string)
 local mapGuard: Guard.GuardFn<{ [string]: number }> = Guard.map(Guard.string, Guard.number)
 local arrayGuard: Guard.GuardFn<{ string }> = Guard.array(Guard.string)
+type State = "ready" | "waiting"
+type Position = "first" | "second"
+local booleanSet: { [State]: true } = { ready = true, waiting = true }
+local booleanSetGuard: Guard.GuardFn<State> = Guard.enumInSet(booleanSet)
+local numberSet: { [Position]: number } = { first = 1, second = 2 }
+local numberSetGuard: Guard.GuardFn<Position> = Guard.enumInSet(numberSet)
 
 local function narrowProfile(value: unknown): Profile
 	return profileGuard(value)
@@ -85,4 +91,6 @@ return {
 	propertyGuard = propertyGuard,
 	mapGuard = mapGuard,
 	arrayGuard = arrayGuard,
+	booleanSetGuard = booleanSetGuard,
+	numberSetGuard = numberSetGuard,
 }
