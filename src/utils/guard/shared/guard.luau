@@ -5,23 +5,15 @@
 -- Guards preserve identity. Child guards are contractually non-yielding, but Luau's yieldable
 -- pcall can propagate a violating child's yield rather than enforce that contract.
 
-export type GuardFn<T> = (value: unknown) -> T
-export type UnknownTable = { [unknown]: unknown }
-export type ExactRecordSchema = { [string]: GuardFn<unknown> }
+local GuardTypes = require(script.Parent.Parent.Parent.Parent.types.def.guard.shared.guard)
 
-export type OneOf =
-	(<A>(GuardFn<A>) -> GuardFn<A>)
-	& (<A, B>(GuardFn<A>, GuardFn<B>) -> GuardFn<A | B>)
-	& (<A, B, C>(GuardFn<A>, GuardFn<B>, GuardFn<C>) -> GuardFn<A | B | C>)
-	& (<A, B, C, D>(GuardFn<A>, GuardFn<B>, GuardFn<C>, GuardFn<D>) -> GuardFn<A | B | C | D>)
-	& ((...GuardFn<unknown>) -> GuardFn<unknown>)
-
-export type All =
-	(<A>(GuardFn<A>) -> GuardFn<A>)
-	& (<A, B>(GuardFn<A>, GuardFn<B>) -> GuardFn<A & B>)
-	& (<A, B, C>(GuardFn<A>, GuardFn<B>, GuardFn<C>) -> GuardFn<A & B & C>)
-	& (<A, B, C, D>(GuardFn<A>, GuardFn<B>, GuardFn<C>, GuardFn<D>) -> GuardFn<A & B & C & D>)
-	& ((...GuardFn<unknown>) -> GuardFn<unknown>)
+export type GuardFn<T> = GuardTypes.GuardFn<T>
+export type UnknownTable = GuardTypes.UnknownTable
+export type ExactRecordSchema = GuardTypes.ExactRecordSchema
+type OneOf = GuardTypes.OneOf
+type All = GuardTypes.All
+type RecordOf<Schema> = GuardTypes.RecordOf<Schema>
+type TaggedOf<Arms> = GuardTypes.TaggedOf<Arms>
 
 local function kindOf(value: unknown): string
 	return typeof(value)
@@ -190,10 +182,10 @@ local function oneOfImplementation(...: GuardFn<unknown>): GuardFn<unknown>
 	end
 end
 
-local function byTag<T>(tagKey: string, arms: { [string]: GuardFn<T> }): GuardFn<T>
+local function byTag<Arms>(tagKey: string, arms: Arms): GuardFn<TaggedOf<Arms>>
 	local armSnapshot = table.freeze(table.clone(arms))
 
-	return function(value: unknown): T
+	return function(value: unknown): TaggedOf<Arms>
 		assert(type(value) == "table", `Guard.byTag expected table, got {kindOf(value)}`)
 
 		local record = value :: UnknownTable
@@ -216,7 +208,7 @@ local function byTag<T>(tagKey: string, arms: { [string]: GuardFn<T> }): GuardFn
 
 		assert(type(tag) == "string", "Guard.byTag selected an arm without a string tag")
 		runChild(`Guard.byTag arm {string.format("%q", tag)}`, arm, value)
-		return value :: T
+		return value :: TaggedOf<Arms>
 	end
 end
 
@@ -255,10 +247,10 @@ local function mapExcluding<K, V>(
 	keyGuard: GuardFn<K>,
 	valueGuard: GuardFn<V>,
 	excludeKeys: { [unknown]: true }
-): GuardFn<{ [K]: V }>
+): GuardFn<UnknownTable>
 	local excludedKeySnapshot = table.freeze(table.clone(excludeKeys))
 
-	return function(value: unknown): { [K]: V }
+	return function(value: unknown): UnknownTable
 		assert(type(value) == "table", `Guard.mapExcluding expected table, got {kindOf(value)}`)
 
 		local record = value :: UnknownTable
@@ -271,7 +263,7 @@ local function mapExcluding<K, V>(
 			runChild(`Guard.mapExcluding value [{tostring(rawKey)}]`, valueGuard, rawValue)
 		end
 
-		return value :: { [K]: V }
+		return record
 	end
 end
 
@@ -287,10 +279,10 @@ local function property<T, P>(key: P, valueGuard: GuardFn<T>): GuardFn<{ [P]: T 
 	end
 end
 
-local function exactRecord<T>(schema: ExactRecordSchema): GuardFn<T>
+local function exactRecord<Schema>(schema: Schema & ExactRecordSchema): GuardFn<RecordOf<Schema>>
 	local schemaSnapshot = table.freeze(table.clone(schema))
 
-	return function(value: unknown): T
+	return function(value: unknown): RecordOf<Schema>
 		assert(type(value) == "table", `Guard.exactRecord expected table, got {kindOf(value)}`)
 
 		local record = value :: UnknownTable
@@ -312,7 +304,7 @@ local function exactRecord<T>(schema: ExactRecordSchema): GuardFn<T>
 			)
 		end
 
-		return value :: T
+		return value :: RecordOf<Schema>
 	end
 end
 
@@ -341,7 +333,35 @@ local function enumInSet<E>(set: { [E]: unknown }): GuardFn<E>
 	end
 end
 
-return table.freeze({
+type GuardModule = {
+	read string: typeof(stringGuard),
+	read fn: typeof(functionGuard),
+	read color3: typeof(color3Guard),
+	read number: typeof(numberGuard),
+	read finite: typeof(finiteGuard),
+	read any: typeof(anyGuard),
+	read boolean: typeof(booleanGuard),
+	read table: typeof(tableGuard),
+	read literal: typeof(literal),
+	read enum: typeof(enumGuard),
+	read vector2: typeof(vector2Guard),
+	read vector3: typeof(vector3Guard),
+	read cframe: typeof(cframeGuard),
+	read tweenInfo: typeof(tweenInfoGuard),
+	read optional: typeof(optional),
+	read oneOf: OneOf,
+	read byTag: typeof(byTag),
+	read all: All,
+	read map: typeof(map),
+	read array: typeof(array),
+	read mapExcluding: typeof(mapExcluding),
+	read property: typeof(property),
+	read exactRecord: typeof(exactRecord),
+	read forbid: typeof(forbid),
+	read enumInSet: typeof(enumInSet),
+}
+
+local Guard: GuardModule = table.freeze({
 	string = stringGuard,
 	fn = functionGuard,
 	color3 = color3Guard,
@@ -368,3 +388,5 @@ return table.freeze({
 	forbid = forbid,
 	enumInSet = enumInSet,
 })
+
+return Guard

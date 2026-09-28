@@ -49,11 +49,11 @@ local countedGuard: Guard.GuardFn<Counted> = Guard.exactRecord({
 })
 
 local profileTaggedGuard: Guard.GuardFn<Tagged> = Guard.exactRecord({
-	kind = Guard.literal("profile"),
+	kind = Guard.literal("profile" :: "profile"),
 	profile = profileGuard,
 })
 local countTaggedGuard: Guard.GuardFn<Tagged> = Guard.exactRecord({
-	kind = Guard.literal("count"),
+	kind = Guard.literal("count" :: "count"),
 	count = Guard.number,
 })
 local taggedGuard: Guard.GuardFn<Tagged> = Guard.byTag("kind", {

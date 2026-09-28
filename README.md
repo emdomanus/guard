@@ -43,3 +43,42 @@ local guardSettings = Guard.exactRecord({
 
 Finite does not imply positive, integral, or within a particular range. Compose those checks in
 the domain guard. Run package tests with `pwsh -NoProfile -File scripts/verify/tests.ps1`.
+
+## Solver V2 contracts
+
+The package uses Luau-LSP 1.70.1 with solver V2, Lune 0.10.5, Selene 0.31.0 and StyLua 2.1.0.
+Public methods are read-only, matching the frozen runtime module. `exactRecord` derives its result
+fields from the schema's guard results; `byTag` derives the union of its arm results. Keep tag
+literals precise, for example `Guard.literal("profile" :: "profile")`. A mismatched claimed record
+shape is rejected instead of being inferred from a return-only generic.
+
+`mapExcluding` preserves and skips excluded entries, including their keys and values. Its return
+type is now `GuardFn<UnknownTable>`: an excluded value may not satisfy the value guard, and an excluded
+key may not satisfy the key guard. Previously the signature incorrectly claimed that every entry
+formed a homogeneous map. Runtime behavior is unchanged. Consumers needing a domain record must
+validate excluded fields separately and establish that domain contract at their validation boundary;
+do not cast the result to an unrestricted homogeneous map. `map` still returns `GuardFn<{ [K]: V }>`.
+
+The public Pesde entry remains `src/init.luau`. Implementation lives in
+`src/utils/guard/shared/guard.luau`; canonical contracts live in `src/types/def/guard/shared/guard.luau`.
+Behavior tests load the actual public entry with its script-relative dependencies in memory.
+
+## Verification
+
+Install pinned tools with `rokit install`. Supply a fixed Roblox definitions file via `-Definitions`
+to `scripts/verify/analyze.ps1`. CLI and workspace editor settings select solver V2 explicitly.
+`LUAU_LSP_OVERRIDE` optionally selects an absolute patched analyzer path (the persisted Windows user
+value is used when absent from the process). It must report the pinned version. The analyzer wrapper
+records its path, selection mode, override SHA-256, pins, definitions hash, arguments and native exit
+alongside complete output under `.verification/`; it never replaces Rokit's cache or shims.
+
+Run `scripts/verify/tests.ps1`, `scripts/verify/stylua.ps1`, `scripts/verify/selene.ps1`, and
+`scripts/verify/analyze.ps1` through PowerShell 7. Accepted contracts must have zero diagnostics.
+The draft rejected examples in `tests/type-errors/` still need an expectation-checking runner.
+`scripts/verify/tooling-tests.ps1` exercises process capture and invalid override rejection.
+
+The last recorded analyzer capture predates removal of the broad indexer intersection from
+`byTag`'s `arms` parameter. This checkpoint preserves that inference fix; a fresh accepted-contract
+capture and rejected-input coverage are still pending. VoxelMMO's
+`docs/todo/overnightPackageMigration.md` records the earlier verification evidence. Further migration
+work now follows the repository owner's individual instructions rather than that staged plan.

@@ -16,7 +16,7 @@ type GuardModule = {
 	all: (...GuardFn<unknown>) -> GuardFn<unknown>,
 	map: <K, V>(GuardFn<K>, GuardFn<V>) -> GuardFn<{ [K]: V }>,
 	array: <V>(GuardFn<V>) -> GuardFn<{ V }>,
-	mapExcluding: <K, V>(GuardFn<K>, GuardFn<V>, { [unknown]: true }) -> GuardFn<{ [K]: V }>,
+	mapExcluding: <K, V>(GuardFn<K>, GuardFn<V>, { [unknown]: true }) -> GuardFn<UnknownTable>,
 	property: <T, P>(P, GuardFn<T>) -> GuardFn<UnknownTable>,
 	exactRecord: <T>({ [string]: GuardFn<unknown> }) -> GuardFn<T>,
 	forbid: (...string) -> GuardFn<UnknownTable>,
@@ -24,7 +24,7 @@ type GuardModule = {
 }
 
 local requireFile = (require :: unknown) :: (string) -> GuardModule
-local Guard = requireFile("../../src/guard/init.luau")
+local Guard = requireFile("./lib/loadGuard")
 
 type TestCase = {
 	name: string,

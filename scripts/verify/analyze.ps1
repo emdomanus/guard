@@ -1,53 +1,38 @@
+#Requires -Version 7.0
 [CmdletBinding()]
 param(
-	[string]$Project = "dev.project.json",
-	[string]$Sourcemap = "dev-sourcemap.json",
-	[string]$Definitions = "",
-	[string[]]$Paths = @("src", "tests/type-contracts")
+    [string]$Project = 'dev.project.json',
+    [string]$Sourcemap = 'dev-sourcemap.json',
+    [string]$Definitions = '',
+    [string[]]$Paths = @('src', 'tests/type-contracts'),
+    [string]$OutDir = '.verification/analyze'
 )
-
-$ErrorActionPreference = "Stop"
-
-if (-not $Definitions) {
-	$Definitions = Join-Path $PSScriptRoot "..\luau-lsp\globalTypes.d.luau"
+. (Join-Path $PSScriptRoot 'tools.ps1')
+$repoRoot = Get-PackageRoot
+if (-not $Definitions) { $Definitions = Join-Path $PSScriptRoot '../luau-lsp/globalTypes.d.luau' }
+$definitionsPath = (Resolve-Path -LiteralPath $Definitions).ProviderPath
+foreach ($path in $Paths) {
+    if (-not (Test-Path -LiteralPath (Join-Path $repoRoot $path))) { throw "Missing analysis target '$path'." }
 }
-
-function Resolve-RokitBinary {
-	param([string]$Name)
-
-	$rokitBin = Join-Path ([Environment]::GetFolderPath("UserProfile")) ".rokit\bin"
-	foreach ($fileName in @("$Name.exe", $Name)) {
-		$binaryPath = Join-Path $rokitBin $fileName
-		if (Test-Path -LiteralPath $binaryPath -PathType Leaf) {
-			return $binaryPath
-		}
-	}
-
-	throw "Rokit-managed '$Name' binary was not found in '$rokitBin'. Run 'rokit install' from the repository root."
+$rojo = Resolve-PackageTool 'rojo'
+$analyzer = Resolve-PackageTool 'luau-lsp'
+$generated = Invoke-PackageTool $rojo.Path @('sourcemap', $Project, '--output', $Sourcemap)
+Write-Output $generated.Output
+if ($generated.ExitCode -ne 0) { exit $generated.ExitCode }
+$arguments = @('analyze', '--flag:LuauSolverV2=true', "--sourcemap=$Sourcemap", "--definitions:@roblox=$definitionsPath") + $Paths
+Write-Output "Analyzer: $($analyzer.Path); version=$($analyzer.Version); source=$($analyzer.Source); sha256=$($analyzer.Sha256); solver=V2"
+$result = Invoke-PackageTool $analyzer.Path $arguments
+$evidence = [IO.Path]::GetFullPath((Join-Path $repoRoot $OutDir))
+New-Item -ItemType Directory -Force $evidence | Out-Null
+[IO.File]::WriteAllText((Join-Path $evidence 'raw.txt'), $result.Output)
+$summary = [ordered]@{
+    captureValid = $result.ExitCode -in @(0, 1)
+    exitCode = $result.ExitCode
+    analyzer = $analyzer
+    arguments = $arguments
+    definitionsSha256 = (Get-FileHash -LiteralPath $definitionsPath -Algorithm SHA256).Hash
+    rokitSha256 = (Get-FileHash -LiteralPath (Join-Path $repoRoot 'rokit.toml') -Algorithm SHA256).Hash
 }
-
-$repoRoot = Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..\..")
-$definitionsPath = Resolve-Path -LiteralPath $Definitions -ErrorAction SilentlyContinue
-if (-not $definitionsPath) {
-	throw "Roblox definitions were not found at '$Definitions'. Run scripts/luau-lsp/fetch-roblox-types.ps1 first."
-}
-
-$rojo = Resolve-RokitBinary "rojo"
-$luauLsp = Resolve-RokitBinary "luau-lsp"
-$existingPaths = @($Paths | Where-Object { Test-Path -LiteralPath (Join-Path $repoRoot $_) })
-if ($existingPaths.Count -eq 0) {
-	throw "No requested Luau-LSP paths exist."
-}
-
-Push-Location $repoRoot
-try {
-	& $rojo "sourcemap" $Project "--output" $Sourcemap
-	if ($LASTEXITCODE -ne 0) {
-		exit $LASTEXITCODE
-	}
-
-	& $luauLsp "analyze" "--sourcemap=$Sourcemap" "--definitions:@roblox=$($definitionsPath.ProviderPath)" @existingPaths
-	exit $LASTEXITCODE
-} finally {
-	Pop-Location
-}
+$summary | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $evidence 'summary.json')
+Write-Output $result.Output
+exit $result.ExitCode
