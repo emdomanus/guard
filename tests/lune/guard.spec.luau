@@ -5,6 +5,7 @@ type UnknownTable = { [unknown]: unknown }
 type GuardModule = {
 	string: GuardFn<string>,
 	number: GuardFn<number>,
+	finite: GuardFn<number>,
 	boolean: GuardFn<boolean>,
 	table: GuardFn<UnknownTable>,
 	literal: <T>(T) -> GuardFn<T>,
@@ -68,6 +69,35 @@ test("primitive, literal, and enum guards return their input", function()
 	assertSame(Guard.literal(token)(token), token)
 	assertSame(Guard.enum({ token })(token), token)
 	assertSame(Guard.enumInSet({ [token] = true })(token), token)
+end)
+
+test("finite accepts finite numbers unchanged, including signed zero", function()
+	for _, value in { 0, -0.0, 1, -1, 0.25, 1e-300, 1e308, -1e308 } do
+		assertSame(Guard.finite(value), value)
+	end
+	assertEqual(1 / Guard.finite(-0.0), -math.huge, "finite must preserve negative zero")
+	assertSame(Guard.optional(Guard.finite)(nil), nil)
+	local input = table.freeze({ weight = 0.7 })
+	assertSame(Guard.exactRecord({ weight = Guard.finite })(input), input)
+end)
+
+test("finite rejects NaN, infinities and non-numbers without changing number", function()
+	for _, value in { 0 / 0, math.huge, -math.huge } do
+		expectErrorContains(function()
+			Guard.finite(value)
+		end, "Guard.finite expected a finite number")
+	end
+	for _, value in { "1", true, {}, function() end } do
+		expectErrorContains(function()
+			Guard.finite(value)
+		end, "Guard.finite expected number")
+	end
+	expectErrorContains(function()
+		Guard.finite(nil)
+	end, "Guard.finite expected number")
+	assertSame(Guard.number(math.huge), math.huge)
+	local nan = Guard.number(0 / 0)
+	assert(nan ~= nan, "Guard.number must retain its existing NaN acceptance")
 end)
 
 test("enum snapshots its construction values", function()

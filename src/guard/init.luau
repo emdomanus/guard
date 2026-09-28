@@ -73,6 +73,15 @@ local function numberGuard(value: unknown): number
 	return value
 end
 
+local function finiteGuard(value: unknown): number
+	assert(type(value) == "number", `Guard.finite expected number, got {kindOf(value)}`)
+	assert(
+		value == value and value > -math.huge and value < math.huge,
+		"Guard.finite expected a finite number"
+	)
+	return value
+end
+
 local function anyGuard(value: unknown): any
 	return value
 end
@@ -337,6 +346,7 @@ return table.freeze({
 	fn = functionGuard,
 	color3 = color3Guard,
 	number = numberGuard,
+	finite = finiteGuard,
 	any = anyGuard,
 	boolean = booleanGuard,
 	table = tableGuard,
